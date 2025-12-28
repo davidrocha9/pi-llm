@@ -1,0 +1,2 @@
+# This directory stores GGUF model files
+# Download models with: python scripts/download_model.py
