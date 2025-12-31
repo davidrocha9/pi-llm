@@ -2,28 +2,30 @@
 set -euo pipefail
 
 # Start script for Pi LLM service
-# Usage: bash scripts/start.sh
-
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="${SCRIPT_DIR}/.."
 cd "$PROJECT_ROOT"
 
+if [ ! -d .venv ]; then
+  echo "Error: Virtual environment (.venv) not found."
+  echo "Please run the setup script first:"
+  echo "  bash scripts/setup.sh"
+  exit 1
+fi
+
+# Activate virtualenv
+source .venv/bin/activate
+
+# Load environment variables if .env exists
 if [ -f .env ]; then
-  # Export variables from .env into the environment for child processes
-  # shellcheck disable=SC1091
   set -o allexport
   source .env
   set +o allexport
 fi
 
-if [ -d .venv ]; then
-  source .venv/bin/activate
-else
-  echo "Virtualenv not found. Run: bash scripts/setup.sh" >&2
-  exit 1
-fi
-
-: ${HOST:=127.0.0.1}
-: ${PORT:=8000}
+# Default host and port (0.0.0.0 allows access from other devices on the network)
+HOST=${HOST:-0.0.0.0}
+PORT=${PORT:-8000}
 
 echo "Starting Pi LLM server on ${HOST}:${PORT}..."
 exec uvicorn app.main:app --host "$HOST" --port "$PORT"

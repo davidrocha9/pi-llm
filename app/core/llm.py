@@ -36,11 +36,36 @@ class LLMManager:
         """
         model_path = Path(self.settings.model_path)
 
+        # If configured path doesn't exist, attempt to find a matching
+        # .gguf file in the repository `models/` directory. This handles
+        # small filename variations (e.g. dot vs hyphen mistakes).
         if not model_path.exists():
-            raise FileNotFoundError(
-                f"Model not found at {model_path}. "
-                f"Run 'python scripts/download_model.py' to download it."
-            )
+            repo_root = Path(__file__).resolve().parents[2]
+            models_dir = (repo_root / "models").resolve()
+
+            target_name = Path(self.settings.model_path).name
+            if not target_name and getattr(self.settings, "model_filename", None):
+                target_name = self.settings.model_filename
+
+            def _normalize(name: str) -> str:
+                return "".join(ch.lower() for ch in name if ch.isalnum())
+
+            found = None
+            if models_dir.exists():
+                for p in models_dir.iterdir():
+                    if p.suffix.lower() != ".gguf":
+                        continue
+                    if _normalize(p.name) == _normalize(target_name):
+                        found = p
+                        break
+
+            if found:
+                model_path = found
+            else:
+                raise FileNotFoundError(
+                    f"Model not found at {model_path}. "
+                    f"Run 'python scripts/download_model.py' to download it."
+                )
 
         try:
             # Import here to avoid loading llama_cpp if not needed

@@ -152,3 +152,49 @@ async def wait_for_completion(inference_request: InferenceRequest) -> GenerateRe
         completion_tokens=stats.get("completion_tokens", 0),
         total_tokens=stats.get("total_tokens", 0),
     )
+
+
+@router.post(
+    "/keys/generate",
+    response_model=KeyGenerateResponse,
+    tags=["Management"],
+    summary="Generate a new API key",
+    description="Create a new API key. No authentication required.",
+)
+async def generate_key(
+    body: KeyGenerateRequest,
+) -> KeyGenerateResponse:
+    """Generate and store a new secure API key."""
+    new_key = secrets.token_urlsafe(32)
+    settings = get_settings()
+    
+    db_path = settings.api_keys_db
+    if not db_path:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="SQLite key storage is not configured on this server.",
+        )
+
+    # Resolve path
+    repo_root = Path(__file__).resolve().parents[2]
+    p = Path(db_path)
+    if not p.is_absolute():
+        p = (repo_root / p).resolve()
+
+    try:
+        ks = KeyStore(p)
+        ks.add_key(new_key, owner=body.owner)
+        ks.close()
+        
+        return KeyGenerateResponse(
+            api_key=new_key,
+            owner=body.owner,
+            created_at=int(time.time()),
+        )
+    except Exception as e:
+        logger.error(f"Failed to generate API key: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal error while saving the new key.",
+        )
+

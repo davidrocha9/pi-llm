@@ -1,139 +1,129 @@
-# Pi LLM — On‑Demand LLM on Raspberry Pi 5
+# Pi LLM
 
-Turns your Raspberry Pi 5 into a personal, private AI assistant running Gemma 3 (1B) locally. This repository provides a compact REST API to run local inference with a small memory footprint.
+On-Demand LLM service optimized for **Raspberry Pi 5**, featuring Google's **Gemma 3 1B** model with 4-bit quantization.
 
-**Features**
-- Local inference of Gemma 3 (1B) with 4-bit quantization (gguf).
-- Simple REST API: prompt → response (sync and streaming).
-- Request management: accepts concurrent clients, queues requests, and safely serializes model access to avoid crashes.
-- Small and self-hostable — no cloud required.
+This project provides a lightweight FastAPI server that allows you to run a local Large Language Model and access it via a REST API. It is specifically tuned for the `aarch64` architecture and limited resources of a Raspberry Pi, while remaining compatible with standard x86 systems.
 
-**Requirements**
-- Raspberry Pi 5 (recommended) or a similar x86/ARM machine with enough RAM and CPU.
-- Python 3.11+ (see `pyproject.toml`).
-- The model file (e.g. `models/gemma-3-1b-it-Q4_K_M.gguf`) — `scripts/download_model.py` can help.
+## 🚀 Features
 
-Quick overview — how to run
---------------------------------
-1) Clone & enter the project on the Pi
+- **Gemma 3 1B (GGUF)**: High-performance small language model optimized for edge devices.
+- **FastAPI Interface**: Clean RESTful API for text generation and system health monitoring.
+- **SSE Streaming**: Real-time token streaming using Server-Sent Events (SSE).
+- **SQLite Authentication**: Robust API key management with SQLite storage and HMAC-SHA256 hashing.
+- **Request Queuing**: Built-in concurrency management to handle multiple requests without crashing the Pi.
+- **Tailscale Friendly**: Defaults to `0.0.0.0` for easy access over Tailscale or local networks.
+- **Pi 5 Optimized**: Automated setup for `llama-cpp-python` with OpenBLAS accelerations on ARM.
+
+## 🛠 Tech Stack
+
+- **Python 3.11+**
+- **FastAPI** & **Uvicorn**
+- **llama-cpp-python** (GGML/GGUF backend)
+- **SQLite** (API Key Store)
+- **Pydantic Settings** (Configuration management)
+
+## 📋 Prerequisites
+
+- **Raspberry Pi 5** (recommended) or any Linux/macOS/Windows machine.
+- **Python 3.11** or higher.
+- (Optional) **Tailscale** for remote access.
+
+## ⚙️ Installation
+
+1. **Clone the repository**:
+   ```bash
+   git clone <your-repo-url>
+   cd pi-llm
+   ```
+
+2. **Run the setup script**:
+   The setup script creates a virtual environment, installs dependencies, and **automatically downloads the Gemma 3 model**.
+   
+   - **For Standard PC**:
+     ```bash
+     bash scripts/setup.sh
+     ```
+   - **For Raspberry Pi (ARM)**:
+     ```bash
+     bash scripts/setup.sh --pi
+     ```
+
+3. **(Optional) Manual Model Download**:
+   If you need to re-download or pick a specific model version:
+   ```bash
+   python3 scripts/download_model.py
+   ```
+
+## 🔑 Key Generation
+
+The API is protected by API key authentication. You must generate a key before making requests:
 
 ```bash
-git clone <repo-url> pi-llm
-cd pi-llm
+python3 scripts/gen_key.py
 ```
+*Save the output key; it is stored securely in `api_keys.db`.*
 
-2) Setup (create virtualenv and install dependencies)
+## 🚀 Starting the Server
 
-```bash
-bash scripts/setup.sh
-source .venv/bin/activate
-```
-
-3) Download the model (if you don't have it already)
-
-```bash
-python3 scripts/download_model.py
-# or place your gguf model under the models/ folder
-```
-
-4) Generate an API key (writes to `.env`)
-
-```bash
-chmod +x scripts/gen_key.sh
-./scripts/gen_key.sh
-grep '^API_KEY=' .env
-```
-
-5) Start the server (options)
-
-- Default (binds to 127.0.0.1):
+Start the FastAPI server:
 
 ```bash
 bash scripts/start.sh
 ```
+The server will start on `http://0.0.0.0:8000`.
 
-- Bind to all interfaces (LAN / Tailnet) so other machines can reach it:
+## 📡 API Usage
 
-```bash
-HOST=0.0.0.0 PORT=8000 bash scripts/start.sh
-```
-
-- Run directly with `uvicorn` (for debugging):
+### Health Check
+Check if the model is loaded and see queue statistics.
 
 ```bash
-source .venv/bin/activate
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+curl http://localhost:8000/health
 ```
 
-- Run as a background service (example `systemd` unit):
+### Generate Text
+Generate a response from the model. Supports both streaming (default) and non-streaming.
 
-Create `/etc/systemd/system/pi-llm.service` with contents:
-
-```
-[Unit]
-Description=Pi LLM
-After=network.target
-
-[Service]
-User=pi
-WorkingDirectory=/home/pi/pi-llm
-Environment=PATH=/home/pi/pi-llm/.venv/bin
-ExecStart=/home/pi/pi-llm/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
+**Streaming (SSE):**
+```bash
+curl -N -X POST http://localhost:8000/generate \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_GENERATED_KEY" \
+  -d '{"prompt":"Explain gravity in one sentence.", "stream": true}'
 ```
 
-Then enable and start:
+**Non-Streaming:**
+```bash
+curl -X POST http://localhost:8000/generate \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_GENERATED_KEY" \
+  -d '{"prompt":"What is 2+2?", "stream": false}'
+```
+
+### Key Management
+Generate a new API key via the API.
 
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now pi-llm
-sudo journalctl -u pi-llm -f
+curl -X POST http://localhost:8000/keys/generate \
+  -H "Content-Type: application/json" \
+  -d '{"owner": "External Device 1"}'
 ```
 
-6) Call the API from your PC
+## ⚙️ Configuration
 
-Fetch the API key from the Pi (via Tailnet/SSH):
+You can customize the server by creating a `.env` file in the root directory:
 
-```bash
-KEY=$(ssh pi@<PI_TAILNET_IP> "grep '^API_KEY=' /home/pi/pi-llm/.env | cut -d= -f2-")
+```env
+HOST=0.0.0.0
+PORT=8000
+MODEL_PATH=models/gemma-3-1b-it-Q4_K_M.gguf
+N_CTX=2048
+N_THREADS=4
+API_KEYS_DB=api_keys.db
 ```
 
-Direct request (server reachable via Tailnet or LAN IP):
+## 📝 Notes on Pi 5 Performance
 
-```bash
-curl -s -X POST http://<PI_TAILNET_IP>:8000/generate \
-	-H "Content-Type: application/json" \
-	-H "X-API-Key: $KEY" \
-	-d '{"prompt":"Hello from my PC","stream":false}'
-```
-
-If server is bound to `127.0.0.1` on the Pi, create an SSH tunnel from your PC:
-
-```bash
-ssh -L 8000:localhost:8000 pi@<PI_TAILNET_IP>
-# then on your PC:
-curl -s -X POST http://localhost:8000/generate -H "Content-Type: application/json" -H "X-API-Key: $KEY" -d '{"prompt":"Hi","stream":false}'
-```
-
-Notes & tuning
---------------
-- The app serializes actual model calls (the underlying model library is not safe for concurrent calls on the same instance), but it still tracks and queues multiple client requests so clients don't block while waiting to be accepted.
-- Tune `max_concurrent_requests` and `max_queue_size` in `app/config.py` to balance memory and responsiveness.
-- If you need parallel model inference you must run multiple separate model processes (high memory cost) or a pool of machines.
-
-Security
---------
-- Keep the API key secret. Do not check `.env` into source control.
-- For public access use a reverse proxy with TLS or a secure tunnel (Cloudflare Tunnel, ngrok, or SSH tunnels).
-
-Useful files
-------------
-- `scripts/setup.sh` — create venv & install deps
-- `scripts/start.sh` — start wrapper (reads `.env` and activates venv)
-- `scripts/gen_key.sh` — generate API key and write to `.env`
-- `scripts/download_model.py` — helper to download gguf model
-- `app/` — application code
-- `models/` — place gguf model here
+- **Thermal Throttling**: Running LLMs is CPU intensive. Ensure your Pi 5 has adequate cooling (Active Cooler).
+- **Memory**: The Gemma 3 1B model with 4-bit quantization fits comfortably within 1GB of RAM, leaving plenty of room for the system.
+- **Inference Speed**: You can expect ~10-15 tokens per second on a Pi 5 with the optimized OpenBLAS build.

@@ -1,3 +1,6 @@
+# Environments
+api_keys.db
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -26,7 +29,6 @@ wheels/
 
 # Virtual environments
 .venv/
-venv/
 ENV/
 env/
 

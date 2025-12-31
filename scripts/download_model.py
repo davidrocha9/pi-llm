@@ -5,13 +5,12 @@ import argparse
 import sys
 from pathlib import Path
 
-# Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
 def download_model(
     repo_id: str = "unsloth/gemma-3-1b-it-GGUF",
-    filename: str | None = "gemma-3-1b-it.Q4_K_M.gguf",
+    filename: str | None = "gemma-3-1b-it-Q4_K_M.gguf",
     output_dir: str = "models",
     auto: bool = False,
 ) -> Path | None:
@@ -49,7 +48,6 @@ def download_model(
         return Path(model_path)
 
     except Exception as first_err:
-        # Attempt to list files in the repository and suggest alternatives
         print(f"\n✗ Download failed: {first_err}")
         print("Attempting to list available files in the repository...")
         try:
@@ -69,7 +67,6 @@ def download_model(
         for f in gguf_files:
             print(f"  - {f}")
 
-        # If auto is requested, pick a preferred .gguf and download it
         if auto:
             preferred_order = [
                 "Q4_K_M",
@@ -81,13 +78,11 @@ def download_model(
             ]
 
             def pick_preferred(candidates: list[str]) -> str:
-                # Find the first candidate that contains a preferred token
                 lower_candidates = [c.lower() for c in candidates]
                 for pref in preferred_order:
                     for orig, low in zip(candidates, lower_candidates):
                         if pref.lower() in low:
                             return orig
-                # Fallback to the first candidate
                 return candidates[0]
 
             chosen = pick_preferred(gguf_files)
@@ -101,7 +96,6 @@ def download_model(
                 print("You can re-run the script specifying --filename or try a different repo.")
                 sys.exit(1)
 
-        # Return None so caller can decide next steps (interactive/manual)
         print("Rerun the script with --filename <file.gguf> or --auto to auto-select a .gguf file.")
         return None
 
@@ -118,8 +112,8 @@ def main():
     )
     parser.add_argument(
         "--filename",
-        default="gemma-3-1b-it.Q4_K_M.gguf",
-        help="GGUF filename to download (default: gemma-3-1b-it.Q4_K_M.gguf)",
+        default="gemma-3-1b-it-Q4_K_M.gguf",
+        help="GGUF filename to download (default: gemma-3-1b-it-Q4_K_M.gguf)",
     )
     parser.add_argument(
         "--output",
