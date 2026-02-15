@@ -9,6 +9,7 @@ This project provides a lightweight FastAPI server that allows you to run a loca
 - **Gemma 2B via Ollama**: High-performance small language model optimized for edge devices.
 - **Ollama Integration**: Automatic model management with Ollama (no manual GGUF downloads).
 - **FastAPI Interface**: Clean RESTful API for text generation and system health monitoring.
+- **System Prompts**: Guide model behavior with dedicated system prompts.
 - **SSE Streaming**: Real-time token streaming using Server-Sent Events (SSE).
 - **SQLite Authentication**: Robust API key management with SQLite storage and HMAC-SHA256 hashing.
 - **Request Queuing**: Built-in concurrency management to handle multiple requests without crashing the Pi.
@@ -60,7 +61,7 @@ pi-llm/
 
 - **Raspberry Pi 5** (recommended) or any Linux/macOS/Windows machine.
 - **Python 3.11** or higher.
-- **curl** (for Ollama installation).
+- **curl** (for installation and API requests).
 - (Optional) **Tailscale** for remote access.
 
 ## ⚙️ Installation
@@ -108,6 +109,83 @@ bash scripts/start.sh
 
 The server will start on `http://0.0.0.0:8000` (configurable via environment variables).
 
+## 📡 Quick Start with cURL
+
+Once the server is running, you can interact with it using curl:
+
+### 1. Check Health
+
+```bash
+curl http://localhost:8000/health
+```
+
+### 2. Generate an API Key
+
+```bash
+curl -X POST http://localhost:8000/keys/generate \
+  -H "Content-Type: application/json" \
+  -d '{"owner": "my-device"}'
+```
+
+Save the returned API key (e.g., `your_api_key_here`) for the next steps.
+
+### 3. Generate Text (Streaming)
+
+```bash
+curl -N -X POST http://localhost:8000/generate \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -d '{
+    "prompt": "Explain gravity in one sentence.",
+    "stream": true
+  }'
+```
+
+### 4. Generate Text (Non-Streaming)
+
+```bash
+curl -X POST http://localhost:8000/generate \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -d '{
+    "prompt": "What is 2+2?",
+    "stream": false
+  }'
+```
+
+### 5. Generate with System Prompt
+
+Guide the model's behavior with a system prompt:
+
+```bash
+curl -X POST http://localhost:8000/generate \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -d '{
+    "prompt": "What is photosynthesis?",
+    "system": "You are a science teacher explaining to a 5-year-old. Use simple words and be enthusiastic.",
+    "stream": false
+  }'
+```
+
+### Full Example with All Parameters
+
+```bash
+curl -N -X POST http://localhost:8000/generate \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -d '{
+    "prompt": "Write a haiku about coding",
+    "system": "You are a creative writing assistant",
+    "max_tokens": 100,
+    "temperature": 0.8,
+    "top_p": 0.9,
+    "top_k": 40,
+    "stop": ["\n\n"],
+    "stream": true
+  }'
+```
+
 ## 📡 API Endpoints
 
 ### Health Check
@@ -146,6 +224,7 @@ Generate text from a prompt. Supports both streaming (default) and non-streaming
 ```json
 {
   "prompt": "Explain gravity in one sentence.",
+  "system": "You are a helpful assistant",
   "max_tokens": 512,
   "temperature": 0.7,
   "top_p": 0.9,
@@ -157,6 +236,7 @@ Generate text from a prompt. Supports both streaming (default) and non-streaming
 
 **Parameters:**
 - `prompt` (string, required): The input prompt (1-8192 characters)
+- `system` (string, optional): System prompt to guide model behavior (max 4096 characters)
 - `max_tokens` (integer, optional): Maximum tokens to generate (1-2048, default: 512)
 - `temperature` (float, optional): Sampling temperature 0.0-2.0 (default: 0.7)
 - `top_p` (float, optional): Top-p sampling 0.0-1.0 (default: 0.9)
@@ -195,6 +275,21 @@ curl -X POST http://localhost:8000/generate \
   "completion_tokens": 5,
   "total_tokens": 10
 }
+```
+
+#### Using System Prompts
+
+System prompts guide the model's behavior and style:
+
+```bash
+curl -X POST http://localhost:8000/generate \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -d '{
+    "prompt": "Tell me about the solar system",
+    "system": "You are an enthusiastic astronomy professor. Be engaging and use analogies.",
+    "stream": false
+  }'
 ```
 
 ### Generate API Key

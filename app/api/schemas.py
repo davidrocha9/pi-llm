@@ -13,6 +13,12 @@ class GenerateRequest(BaseModel):
         max_length=8192,
         examples=["What is the capital of France?"],
     )
+    system: str | None = Field(
+        default=None,
+        description="System prompt to guide the model's behavior",
+        max_length=4096,
+        examples=["You are a helpful assistant that provides concise answers."],
+    )
     max_tokens: int | None = Field(
         default=None,
         description="Maximum number of tokens to generate (uses server default if not specified)",
@@ -72,12 +78,10 @@ class HealthResponse(BaseModel):
     model_path: str = Field(..., description="Path to the model file")
     queue_size: int = Field(..., description="Number of requests waiting in queue")
     active_requests: int = Field(
-        default=0,
-        description="Number of requests currently being processed"
+        default=0, description="Number of requests currently being processed"
     )
     max_concurrent: int = Field(
-        default=0,
-        description="Maximum concurrent requests allowed"
+        default=0, description="Maximum concurrent requests allowed"
     )
 
 
@@ -104,4 +108,3 @@ class KeyGenerateResponse(BaseModel):
     api_key: str = Field(..., description="The generated API key")
     owner: str = Field(..., description="Owner of the API key")
     created_at: int = Field(..., description="Unix timestamp of creation")
-

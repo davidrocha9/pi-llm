@@ -85,6 +85,7 @@ async def generate(
     # Create inference request
     inference_request = InferenceRequest(
         prompt=body.prompt,
+        system=body.system,
         max_tokens=max_tokens,
         temperature=body.temperature,
         top_p=body.top_p,
@@ -124,12 +125,14 @@ async def stream_generator(inference_request: InferenceRequest):
         stats = await inference_request.get_stats()
         yield {
             "event": "done",
-            "data": json.dumps({
-                "done": True,
-                "prompt_tokens": stats.get("prompt_tokens", 0),
-                "completion_tokens": stats.get("completion_tokens", 0),
-                "total_tokens": stats.get("total_tokens", 0),
-            }),
+            "data": json.dumps(
+                {
+                    "done": True,
+                    "prompt_tokens": stats.get("prompt_tokens", 0),
+                    "completion_tokens": stats.get("completion_tokens", 0),
+                    "total_tokens": stats.get("total_tokens", 0),
+                }
+            ),
         }
     except asyncio.CancelledError:
         logger.info(f"Stream cancelled for request {inference_request.id}")
@@ -173,7 +176,7 @@ async def generate_key(
     """Generate and store a new secure API key."""
     new_key = secrets.token_urlsafe(32)
     settings = get_settings()
-    
+
     db_path = settings.api_keys_db
     if not db_path:
         raise HTTPException(
@@ -191,7 +194,7 @@ async def generate_key(
         ks = KeyStore(p)
         ks.add_key(new_key, owner=body.owner)
         ks.close()
-        
+
         return KeyGenerateResponse(
             api_key=new_key,
             owner=body.owner,
@@ -203,4 +206,3 @@ async def generate_key(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal error while saving the new key.",
         )
-

@@ -40,7 +40,9 @@ class LLMManager:
 
             # Check if model exists, pull if not
             models = self._client.list()
-            model_names = [m.model for m in models.models] if hasattr(models, 'models') else []
+            model_names = (
+                [m.model for m in models.models] if hasattr(models, "models") else []
+            )
 
             if self.MODEL_NAME not in model_names:
                 logger.info(f"Model {self.MODEL_NAME} not found. Pulling...")
@@ -61,6 +63,7 @@ class LLMManager:
     def generate(
         self,
         prompt: str,
+        system: str | None = None,
         max_tokens: int = 512,
         temperature: float = 0.7,
         top_p: float = 0.9,
@@ -71,6 +74,7 @@ class LLMManager:
 
         Args:
             prompt: The input prompt.
+            system: Optional system prompt to guide the model's behavior.
             max_tokens: Maximum tokens to generate.
             temperature: Sampling temperature.
             top_p: Top-p sampling parameter.
@@ -86,17 +90,24 @@ class LLMManager:
         if not self._is_loaded or not self._client:
             raise RuntimeError("Ollama not connected")
 
-        response = self._client.generate(
-            model=self.MODEL_NAME,
-            prompt=prompt,
-            options={
+        # Build request parameters
+        request_params = {
+            "model": self.MODEL_NAME,
+            "prompt": prompt,
+            "options": {
                 "num_predict": max_tokens,
                 "temperature": temperature,
                 "top_p": top_p,
                 "top_k": top_k,
                 "stop": stop or [],
             },
-        )
+        }
+
+        # Add system prompt if provided
+        if system:
+            request_params["system"] = system
+
+        response = self._client.generate(**request_params)
 
         # Estimate token counts (Ollama doesn't always provide these)
         text = response.get("response", "")
@@ -113,6 +124,7 @@ class LLMManager:
     def generate_stream(
         self,
         prompt: str,
+        system: str | None = None,
         max_tokens: int = 512,
         temperature: float = 0.7,
         top_p: float = 0.9,
@@ -123,18 +135,25 @@ class LLMManager:
         if not self._is_loaded or not self._client:
             raise RuntimeError("Ollama not connected")
 
-        stream = self._client.generate(
-            model=self.MODEL_NAME,
-            prompt=prompt,
-            options={
+        # Build request parameters
+        request_params = {
+            "model": self.MODEL_NAME,
+            "prompt": prompt,
+            "options": {
                 "num_predict": max_tokens,
                 "temperature": temperature,
                 "top_p": top_p,
                 "top_k": top_k,
                 "stop": stop or [],
             },
-            stream=True,
-        )
+            "stream": True,
+        }
+
+        # Add system prompt if provided
+        if system:
+            request_params["system"] = system
+
+        stream = self._client.generate(**request_params)
 
         for chunk in stream:
             text = chunk.get("response", "")

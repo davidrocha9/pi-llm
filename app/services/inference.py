@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 class InferenceService:
     """Service that manages inference requests with multithreading and queue fallback.
-    
+
     This service attempts to process requests immediately using available threads.
     When all threads are busy, requests are queued and processed as threads become available.
     """
@@ -52,7 +52,7 @@ class InferenceService:
 
     async def submit(self, request: InferenceRequest) -> bool:
         """Submit a request for processing.
-        
+
         If threads are available, processes immediately. Otherwise queues.
 
         Args:
@@ -119,7 +119,7 @@ class InferenceService:
             try:
                 # Wait a bit then check for queued work
                 await asyncio.sleep(0.1)
-                
+
                 if self.request_queue.size > 0:
                     await self._process_next_queued()
 
@@ -168,6 +168,7 @@ class InferenceService:
             tokens = []
             for token in self.llm_manager.generate_stream(
                 prompt=request.prompt,
+                system=request.system,
                 max_tokens=request.max_tokens,
                 temperature=request.temperature,
                 top_p=request.top_p,
@@ -210,6 +211,7 @@ class InferenceService:
         def generate():
             return self.llm_manager.generate(
                 prompt=request.prompt,
+                system=request.system,
                 max_tokens=request.max_tokens,
                 temperature=request.temperature,
                 top_p=request.top_p,

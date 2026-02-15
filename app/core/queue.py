@@ -14,6 +14,7 @@ class InferenceRequest:
     """Represents a single inference request in the queue."""
 
     prompt: str
+    system: str | None = None
     max_tokens: int = 512
     temperature: float = 0.7
     top_p: float = 0.9
