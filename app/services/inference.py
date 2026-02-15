@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor
 from statistics import mean
 
@@ -74,7 +75,19 @@ class InferenceService:
                 return True
             else:
                 # Queue for later processing
-                await self.request_queue.put(request)
+                try:
+                    await self.request_queue.put(request)
+                except asyncio.QueueFull as exc:
+                    logger.warning(
+                        "Request %s rejected: queue full (%s/%s)",
+                        request.id,
+                        self.request_queue.size,
+                        self.request_queue.maxsize,
+                    )
+                    raise RuntimeError(
+                        "Server busy: request queue is full. Please retry shortly."
+                    ) from exc
+
                 logger.info(
                     f"Request {request.id} queued "
                     f"(queue size: {self.request_queue.size}, "
@@ -85,6 +98,17 @@ class InferenceService:
     async def _process_with_tracking(self, request: InferenceRequest) -> None:
         """Process a request and track completion."""
         try:
+            max_queue_wait_s = self.llm_manager.settings.max_queue_wait_s
+            queued_for_s = time.monotonic() - request.created_at_monotonic
+            if max_queue_wait_s > 0 and queued_for_s > max_queue_wait_s:
+                await request.fail(
+                    TimeoutError(
+                        "Request timed out while waiting in queue. "
+                        "Retry with lower max_tokens or streaming enabled."
+                    )
+                )
+                return
+
             await self._process_request(request)
         finally:
             async with self._lock:

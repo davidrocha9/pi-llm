@@ -31,6 +31,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _effective_max_tokens(requested: int | None, queue_size: int, settings) -> int:
+    """Compute max_tokens with Pi-safe caps and load-aware downscaling."""
+    desired = requested if requested is not None else settings.max_tokens
+    capped = min(desired, settings.max_request_tokens_cap)
+
+    # If any request is queued, prioritize responsiveness over long completions.
+    if queue_size > 0:
+        capped = min(capped, settings.busy_max_tokens)
+
+    return max(1, capped)
+
+
 @router.get(
     "/health",
     response_model=HealthResponse,
@@ -59,7 +71,9 @@ async def health_check(request: Request) -> HealthResponse:
     responses={
         200: {"description": "Successful generation"},
         401: {"model": ErrorResponse, "description": "Invalid API key"},
+        429: {"model": ErrorResponse, "description": "Server busy"},
         503: {"model": ErrorResponse, "description": "Model not loaded"},
+        504: {"model": ErrorResponse, "description": "Generation timeout"},
     },
     tags=["Generation"],
     summary="Generate text from prompt",
@@ -73,6 +87,7 @@ async def generate(
     """Generate text from the given prompt."""
     llm_manager = request.app.state.llm_manager
     inference_service = request.app.state.inference_service
+    request_queue = request.app.state.request_queue
 
     # Check if model is loaded
     if not llm_manager or not llm_manager.is_loaded:
@@ -80,9 +95,18 @@ async def generate(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Model not loaded. Please download the model first.",
         )
+    if not inference_service or not request_queue:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Inference service not available.",
+        )
 
     settings = get_settings()
-    max_tokens = body.max_tokens or settings.max_tokens
+    max_tokens = _effective_max_tokens(
+        requested=body.max_tokens,
+        queue_size=request_queue.size,
+        settings=settings,
+    )
 
     # Create inference request
     inference_request = InferenceRequest(
@@ -97,7 +121,14 @@ async def generate(
     )
 
     # Submit to inference service (handles threading/queuing automatically)
-    is_immediate = await inference_service.submit(inference_request)
+    try:
+        is_immediate = await inference_service.submit(inference_request)
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(exc),
+        ) from exc
+
     logger.info(
         f"Request {inference_request.id} submitted "
         f"({'immediate' if is_immediate else 'queued'})"
@@ -111,7 +142,19 @@ async def generate(
         )
     else:
         # Synchronous response
-        return await wait_for_completion(inference_request)
+        try:
+            return await asyncio.wait_for(
+                wait_for_completion(inference_request),
+                timeout=settings.sync_response_timeout_s,
+            )
+        except asyncio.TimeoutError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail=(
+                    "Generation timed out. Use stream=true or a lower max_tokens "
+                    "for faster responses on Raspberry Pi."
+                ),
+            ) from exc
 
 
 @router.post(

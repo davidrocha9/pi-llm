@@ -11,6 +11,7 @@ This project provides a lightweight FastAPI server that allows you to run a loca
 - **FastAPI Interface**: Clean RESTful API for text generation and system health monitoring.
 - **System Prompts**: Guide model behavior with dedicated system prompts.
 - **SSE Streaming**: Real-time token streaming using Server-Sent Events (SSE).
+- **Pi Fast Request Handling**: Automatic token caps, queue limits, and timeout safeguards to reduce Pi timeouts.
 - **Benchmark & Auto-Tuning**: Measure token throughput and get recommended Pi settings.
 - **SQLite Authentication**: Robust API key management with SQLite storage and HMAC-SHA256 hashing.
 - **Request Queuing**: Built-in concurrency management to handle multiple requests without crashing the Pi.
@@ -115,9 +116,12 @@ By default, `start.sh` loads `configs/pi5-fast.env`, which includes a Pi-optimiz
 - `N_CTX=512`
 - `MAX_TOKENS=96`
 - `N_THREADS=4`
+- `MAX_CONCURRENT_REQUESTS=1`
+- `MAX_QUEUE_SIZE=8`
 
 The server will start on `http://0.0.0.0:8000`.
 Startup now blocks until the configured `OLLAMA_MODEL` is available and warmed up.
+Request handling is automatically optimized for Pi latency (dynamic token caps + queue protection).
 
 Use a different profile file if needed:
 
@@ -241,7 +245,7 @@ curl http://localhost:8000/health
   "model_path": "qwen2.5:3b",
   "queue_size": 0,
   "active_requests": 0,
-  "max_concurrent": 4
+  "max_concurrent": 1
 }
 ```
 
@@ -432,6 +436,12 @@ OLLAMA_WARMUP=true
 N_CTX=512
 N_THREADS=4
 MAX_TOKENS=96
+MAX_REQUEST_TOKENS_CAP=128
+BUSY_MAX_TOKENS=64
+MAX_QUEUE_WAIT_S=20
+SYNC_RESPONSE_TIMEOUT_S=45
+MAX_CONCURRENT_REQUESTS=1
+MAX_QUEUE_SIZE=8
 API_KEYS_DB=api_keys.db
 ```
 
@@ -463,4 +473,5 @@ Source code and git repository are preserved.
 - **Memory**: `qwen2.5:3b` is heavier than `gemma:2b`; on Pi 5, 8GB RAM is recommended for smoother multitasking.
 - **Inference Speed**: Long answers are expensive on Pi. Keep `max_tokens` low (for example `64-160`) for much faster responses.
 - **Streaming**: Use `"stream": true` to start receiving output immediately instead of waiting for the full completion.
+- **Auto-Fast Guards**: When the server is busy, it auto-reduces `max_tokens`, rejects excess queue load with `429`, and times out long non-stream calls with `504`.
 - **Model Residency**: `OLLAMA_KEEP_ALIVE=30m` keeps the model in memory and avoids repeated cold-start delays.

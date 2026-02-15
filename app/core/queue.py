@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 import uuid
 from dataclasses import dataclass, field
 from typing import AsyncIterator
@@ -15,7 +16,7 @@ class InferenceRequest:
 
     prompt: str
     system: str | None = None
-    max_tokens: int = 160
+    max_tokens: int = 96
     temperature: float = 0.7
     top_p: float = 0.9
     top_k: int = 40
@@ -24,6 +25,7 @@ class InferenceRequest:
 
     # Internal state
     id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
+    created_at_monotonic: float = field(default_factory=time.monotonic)
     _token_queue: asyncio.Queue = field(default_factory=asyncio.Queue)
     _done: asyncio.Event = field(default_factory=asyncio.Event)
     _stats: dict = field(default_factory=dict)
@@ -100,13 +102,26 @@ class RequestQueue:
         """Get the current queue size."""
         return self._queue.qsize()
 
+    @property
+    def maxsize(self) -> int:
+        """Get configured queue capacity."""
+        return self._queue.maxsize
+
+    @property
+    def is_full(self) -> bool:
+        """Check whether the queue is at capacity."""
+        return self.maxsize > 0 and self.size >= self.maxsize
+
     async def put(self, request: InferenceRequest) -> None:
         """Add a request to the queue.
 
         Args:
             request: The inference request to queue.
         """
-        await self._queue.put(request)
+        if self.is_full:
+            raise asyncio.QueueFull
+
+        self._queue.put_nowait(request)
         logger.debug(f"Request {request.id} queued (queue size: {self.size})")
 
     async def get(self) -> InferenceRequest:

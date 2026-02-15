@@ -39,15 +39,21 @@ class Settings(BaseSettings):
     model_filename: str = "gemma-3-1b-it-Q4_K_M.gguf"
 
     # LLM Settings (optimized for Raspberry Pi 5)
-    n_ctx: int = 1024  # Smaller context is faster on Pi-class CPUs
+    n_ctx: int = 512  # Smaller context is faster on Pi-class CPUs
     n_threads: int = 4  # CPU threads for inference
-    max_tokens: int = 160  # Lower default reduces latency significantly
+    max_tokens: int = 96  # Lower default reduces latency significantly
+
+    # Request handling/performance guards
+    max_request_tokens_cap: int = 128  # Hard cap for any single request
+    busy_max_tokens: int = 64  # Auto-cap applied when queue is busy
+    max_queue_wait_s: float = 20.0  # Drop stale queued requests quickly
+    sync_response_timeout_s: float = 45.0  # Avoid long blocking non-stream calls
 
     # Concurrency Settings
     # Note: LLM inference is serialized (llama-cpp not thread-safe), but multiple
     # requests can be tracked/queued. Higher values allow more pending requests.
-    max_concurrent_requests: int = 4  # Max tracked concurrent requests
-    max_queue_size: int = 100  # Max pending requests in overflow queue
+    max_concurrent_requests: int = 1  # One active generation is fastest/stablest on Pi
+    max_queue_size: int = 8  # Keep queue short to prevent client-side timeouts
 
     # Server Configuration
     host: str = "0.0.0.0"
