@@ -87,3 +87,21 @@ class ErrorResponse(BaseModel):
     error: str = Field(..., description="Error message")
     detail: str | None = Field(default=None, description="Additional error details")
 
+
+class KeyGenerateRequest(BaseModel):
+    """Request model for API key generation."""
+
+    owner: str = Field(
+        default="",
+        description="Owner name for the API key",
+        examples=["Device 1"],
+    )
+
+
+class KeyGenerateResponse(BaseModel):
+    """Response model for API key generation."""
+
+    api_key: str = Field(..., description="The generated API key")
+    owner: str = Field(..., description="Owner of the API key")
+    created_at: int = Field(..., description="Unix timestamp of creation")
+

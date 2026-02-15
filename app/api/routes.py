@@ -3,6 +3,9 @@
 import asyncio
 import json
 import logging
+import secrets
+import time
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -13,9 +16,12 @@ from app.api.schemas import (
     GenerateRequest,
     GenerateResponse,
     HealthResponse,
+    KeyGenerateRequest,
+    KeyGenerateResponse,
 )
 from app.config import get_settings
 from app.core.auth import verify_api_key
+from app.core.keys import KeyStore
 from app.core.queue import InferenceRequest
 
 logger = logging.getLogger(__name__)
