@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class LLMManager:
     """Manages the Ollama LLM lifecycle and inference."""
 
-    MODEL_NAME = "gemma:2b"
+    MODEL_NAME = "llama3.2:3b"
 
     def __init__(self, settings: Settings):
         """Initialize the LLM manager.
@@ -90,27 +90,32 @@ class LLMManager:
         if not self._is_loaded or not self._client:
             raise RuntimeError("Ollama not connected")
 
+        # Build messages for chat API
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+
         # Build request parameters
         request_params = {
             "model": self.MODEL_NAME,
-            "prompt": prompt,
+            "messages": messages,
             "options": {
                 "num_predict": max_tokens,
                 "temperature": temperature,
                 "top_p": top_p,
                 "top_k": top_k,
+                "num_thread": 4,  # Use all Pi 5 cores
                 "stop": stop or [],
             },
         }
 
-        # Add system prompt if provided
-        if system:
-            request_params["system"] = system
+        response = self._client.chat(**request_params)
 
-        response = self._client.generate(**request_params)
+        # Extract response text
+        text = response.get("message", {}).get("content", "")
 
         # Estimate token counts (Ollama doesn't always provide these)
-        text = response.get("response", "")
         prompt_tokens = len(prompt.split())  # Rough estimate
         completion_tokens = len(text.split())  # Rough estimate
 
@@ -135,30 +140,33 @@ class LLMManager:
         if not self._is_loaded or not self._client:
             raise RuntimeError("Ollama not connected")
 
+        # Build messages for chat API
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+
         # Build request parameters
         request_params = {
             "model": self.MODEL_NAME,
-            "prompt": prompt,
+            "messages": messages,
             "options": {
                 "num_predict": max_tokens,
                 "temperature": temperature,
                 "top_p": top_p,
                 "top_k": top_k,
+                "num_thread": 4,  # Use all Pi 5 cores
                 "stop": stop or [],
             },
             "stream": True,
         }
 
-        # Add system prompt if provided
-        if system:
-            request_params["system"] = system
-
-        stream = self._client.generate(**request_params)
+        stream = self._client.chat(**request_params)
 
         for chunk in stream:
-            text = chunk.get("response", "")
-            if text:
-                yield text
+            content = chunk.get("message", {}).get("content", "")
+            if content:
+                yield content
 
     def get_token_count(self, text: str) -> int:
         """Count the number of tokens in the given text (estimated).
