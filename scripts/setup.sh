@@ -7,10 +7,19 @@ PROJECT_ROOT="${SCRIPT_DIR}/.."
 cd "$PROJECT_ROOT"
 
 PI_MODE=0
+CONFIG_FILE="${PI_LLM_CONFIG_FILE:-configs/pi5-fast.env}"
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --pi) PI_MODE=1; shift ;;
-    --help|-h) echo "Usage: bash scripts/setup.sh [--pi]"; exit 0 ;;
+    --config)
+      if [ "$#" -lt 2 ]; then
+        echo "Error: --config requires a file path."
+        exit 1
+      fi
+      CONFIG_FILE="$2"
+      shift 2
+      ;;
+    --help|-h) echo "Usage: bash scripts/setup.sh [--pi] [--config <path>]"; exit 0 ;;
     *) echo "Unknown arg: $1"; exit 1 ;;
   esac
 done
@@ -33,6 +42,14 @@ fi
 
 # Activate virtualenv for the rest of the setup
 source .venv/bin/activate
+
+# Load setup model/profile config if present
+if [ -f "$CONFIG_FILE" ]; then
+  set -o allexport
+  source "$CONFIG_FILE"
+  set +o allexport
+  echo "Loaded setup config profile: $CONFIG_FILE"
+fi
 
 echo "Upgrading pip..."
 pip install --upgrade pip

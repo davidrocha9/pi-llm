@@ -6,6 +6,31 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="${SCRIPT_DIR}/.."
 cd "$PROJECT_ROOT"
 
+# Config profile path (can be overridden with --config or PI_LLM_CONFIG_FILE)
+CONFIG_FILE="${PI_LLM_CONFIG_FILE:-configs/pi5-fast.env}"
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --config)
+      if [ "$#" -lt 2 ]; then
+        echo "Error: --config requires a file path."
+        exit 1
+      fi
+      CONFIG_FILE="$2"
+      shift 2
+      ;;
+    --help|-h)
+      echo "Usage: bash scripts/start.sh [--config <path>]"
+      exit 0
+      ;;
+    *)
+      echo "Unknown arg: $1"
+      echo "Usage: bash scripts/start.sh [--config <path>]"
+      exit 1
+      ;;
+  esac
+done
+
 if [ ! -d .venv ]; then
   echo "Error: Virtual environment (.venv) not found."
   echo "Please run the setup script first:"
@@ -24,11 +49,22 @@ fi
 # Activate virtualenv
 source .venv/bin/activate
 
-# Load environment variables if .env exists
+# Load environment variables if .env exists (optional baseline)
 if [ -f .env ]; then
   set -o allexport
   source .env
   set +o allexport
+fi
+
+# Load selected runtime profile (takes precedence over .env)
+if [ -f "$CONFIG_FILE" ]; then
+  set -o allexport
+  source "$CONFIG_FILE"
+  set +o allexport
+  echo "Loaded config profile: $CONFIG_FILE"
+else
+  echo "Config profile not found: $CONFIG_FILE"
+  echo "Continuing with environment/default settings."
 fi
 
 # Default host and port (0.0.0.0 allows access from other devices on the network)
@@ -64,6 +100,7 @@ fi
 echo ""
 echo "Starting Pi LLM server on ${HOST}:${PORT}..."
 echo "Ollama API available at http://localhost:${OLLAMA_PORT}"
+echo "Model profile: ${OLLAMA_MODEL:-gemma:2b}"
 echo ""
 
 # Trap to kill Ollama when the script exits
