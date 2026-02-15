@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     api_keys_db: str | None = "api_keys.db"
 
     # Ollama Model Configuration
-    ollama_model: str = "gemma:2b"
+    ollama_model: str = "qwen2.5:3b"
     ollama_keep_alive: str = "30m"
     ollama_warmup: bool = True
 

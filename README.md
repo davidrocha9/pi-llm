@@ -1,12 +1,12 @@
 # Pi LLM
 
-On-Demand LLM service optimized for **Raspberry Pi 5**, featuring Google's **Gemma 2B** model via Ollama.
+On-Demand LLM service optimized for **Raspberry Pi 5**, featuring **Qwen 2.5 3B** via Ollama.
 
 This project provides a lightweight FastAPI server that allows you to run a local Large Language Model and access it via a REST API. It is specifically tuned for the `aarch64` architecture and limited resources of a Raspberry Pi, while remaining compatible with standard x86 systems.
 
 ## 🚀 Features
 
-- **Gemma 2B via Ollama**: High-performance small language model optimized for edge devices.
+- **Qwen 2.5 3B via Ollama**: Smarter multilingual small model optimized for edge devices.
 - **Ollama Integration**: Automatic model management with Ollama (no manual GGUF downloads).
 - **FastAPI Interface**: Clean RESTful API for text generation and system health monitoring.
 - **System Prompts**: Guide model behavior with dedicated system prompts.
@@ -51,6 +51,8 @@ pi-llm/
 │   ├── start.sh             # Start Ollama and FastAPI server
 │   ├── uninstall.sh         # Remove all downloaded/configured data
 │   └── gen_key.py           # CLI tool to generate API keys
+├── configs/
+│   └── pi5-fast.env         # Default Pi 5 low-latency runtime profile
 ├── .venv/                   # Python virtual environment (created by setup)
 ├── api_keys.db              # SQLite database for API keys
 ├── requirements.txt         # Python dependencies
@@ -74,7 +76,7 @@ pi-llm/
    ```
 
 2. **Run the setup script**:
-   The setup script installs Ollama, creates a virtual environment, installs dependencies, and **pulls the Gemma 2B model**.
+   The setup script installs Ollama, creates a virtual environment, installs dependencies, and **pulls the default Qwen 2.5 3B model**.
    
    ```bash
    bash scripts/setup.sh
@@ -108,7 +110,20 @@ Start the server (automatically starts Ollama in the background):
 bash scripts/start.sh
 ```
 
-The server will start on `http://0.0.0.0:8000` (configurable via environment variables).
+By default, `start.sh` loads `configs/pi5-fast.env`, which includes a Pi-optimized model and latency settings:
+- `OLLAMA_MODEL=qwen2.5:3b`
+- `N_CTX=512`
+- `MAX_TOKENS=96`
+- `N_THREADS=4`
+
+The server will start on `http://0.0.0.0:8000`.
+Startup now blocks until the configured `OLLAMA_MODEL` is available and warmed up.
+
+Use a different profile file if needed:
+
+```bash
+bash scripts/start.sh --config /path/to/your.env
+```
 
 ## 📡 Quick Start with cURL
 
@@ -223,7 +238,7 @@ curl http://localhost:8000/health
 {
   "status": "healthy",
   "model_loaded": true,
-  "model_path": "gemma:2b",
+  "model_path": "qwen2.5:3b",
   "queue_size": 0,
   "active_requests": 0,
   "max_concurrent": 4
@@ -338,7 +353,7 @@ Run controlled benchmark requests and get measured throughput with recommended P
 **Response:**
 ```json
 {
-  "model": "gemma:2b",
+  "model": "qwen2.5:3b",
   "runs": 2,
   "prompt_chars": 47,
   "profiles": [
@@ -405,19 +420,25 @@ curl -X POST http://localhost:8000/keys/generate \
 
 ## ⚙️ Configuration
 
-You can customize the server by creating a `.env` file in the root directory:
+Default runtime profile (`configs/pi5-fast.env`) used by `start.sh`:
 
 ```env
 HOST=0.0.0.0
 PORT=8000
 OLLAMA_PORT=11434
-OLLAMA_MODEL=gemma:2b
+OLLAMA_MODEL=qwen2.5:3b
 OLLAMA_KEEP_ALIVE=30m
 OLLAMA_WARMUP=true
-N_CTX=1024
+N_CTX=512
 N_THREADS=4
-MAX_TOKENS=160
+MAX_TOKENS=96
 API_KEYS_DB=api_keys.db
+```
+
+You can still create a `.env` file for extra overrides/secrets, or pass a different profile:
+
+```bash
+bash scripts/start.sh --config configs/pi5-fast.env
 ```
 
 ## 🗑️ Uninstall
@@ -439,7 +460,7 @@ Source code and git repository are preserved.
 ## 📝 Notes on Pi 5 Performance
 
 - **Thermal Throttling**: Running LLMs is CPU intensive. Ensure your Pi 5 has adequate cooling (Active Cooler).
-- **Memory**: The Gemma 2B model fits comfortably within 2GB of RAM.
+- **Memory**: `qwen2.5:3b` is heavier than `gemma:2b`; on Pi 5, 8GB RAM is recommended for smoother multitasking.
 - **Inference Speed**: Long answers are expensive on Pi. Keep `max_tokens` low (for example `64-160`) for much faster responses.
 - **Streaming**: Use `"stream": true` to start receiving output immediately instead of waiting for the full completion.
 - **Model Residency**: `OLLAMA_KEEP_ALIVE=30m` keeps the model in memory and avoids repeated cold-start delays.

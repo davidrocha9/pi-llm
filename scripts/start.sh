@@ -100,7 +100,7 @@ fi
 echo ""
 echo "Starting Pi LLM server on ${HOST}:${PORT}..."
 echo "Ollama API available at http://localhost:${OLLAMA_PORT}"
-echo "Model profile: ${OLLAMA_MODEL:-gemma:2b}"
+echo "Model profile: ${OLLAMA_MODEL:-qwen2.5:3b}"
 echo ""
 
 # Trap to kill Ollama when the script exits

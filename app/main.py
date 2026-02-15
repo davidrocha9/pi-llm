@@ -44,7 +44,9 @@ async def lifespan(app: FastAPI):
         logger.info("Model loaded successfully!")
     except Exception as e:
         logger.error(f"Failed to load model: {e}")
-        logger.warning("Server starting without model - download model first!")
+        raise RuntimeError(
+            f"Startup aborted: failed to load required model '{llm_manager.model_name}'"
+        ) from e
 
     # Initialize request queue (for overflow when all threads are busy)
     request_queue = RequestQueue(maxsize=settings.max_queue_size)
@@ -90,7 +92,7 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app
 app = FastAPI(
     title="Pi LLM",
-    description="On-Demand LLM on Raspberry Pi 5 - Gemma 3 1B with 4-bit quantization",
+    description="On-Demand LLM on Raspberry Pi 5 with Ollama-managed models",
     version="0.1.0",
     lifespan=lifespan,
 )

@@ -1,7 +1,7 @@
 [project]
 name = "pi-llm"
 version = "0.1.0"
-description = "On-Demand LLM on Raspberry Pi 5 - Gemma 3 1B with 4-bit quantization"
+description = "On-Demand LLM on Raspberry Pi 5 with Ollama-managed models"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

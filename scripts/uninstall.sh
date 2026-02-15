@@ -26,10 +26,11 @@ if [ -d .venv ]; then
     rm -rf .venv
 fi
 
-# Remove Ollama model
+# Remove Ollama models
 if command -v ollama &> /dev/null; then
-    echo "  - Removing Ollama model (gemma:2b)..."
-    ollama rm gemma:2b 2>/dev/null || echo "    (Model may not exist or Ollama not running)"
+    echo "  - Removing Ollama models (qwen2.5:3b, gemma:2b if present)..."
+    ollama rm qwen2.5:3b 2>/dev/null || echo "    (qwen2.5:3b may not exist or Ollama not running)"
+    ollama rm gemma:2b 2>/dev/null || echo "    (gemma:2b may not exist or Ollama not running)"
 fi
 
 # Remove downloaded models

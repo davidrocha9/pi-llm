@@ -64,7 +64,7 @@ if [ -f pyproject.toml ]; then
 fi
 
 # Pull the model using Ollama
-MODEL_NAME="${OLLAMA_MODEL:-gemma:2b}"
+MODEL_NAME="${OLLAMA_MODEL:-qwen2.5:3b}"
 echo ""
 echo "Pulling ${MODEL_NAME} model via Ollama..."
 echo "This may take a few minutes depending on your connection..."
