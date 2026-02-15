@@ -63,6 +63,111 @@ class GenerateResponse(BaseModel):
     total_tokens: int = Field(..., description="Total tokens (prompt + completion)")
 
 
+class BenchmarkRequest(BaseModel):
+    """Request model for benchmark endpoint."""
+
+    prompt: str = Field(
+        default="Explain photosynthesis in two short sentences.",
+        description="Prompt used for the benchmark run",
+        min_length=1,
+        max_length=2048,
+    )
+    system: str | None = Field(
+        default=None,
+        description="Optional system prompt used during benchmarking",
+        max_length=2048,
+    )
+    max_tokens: int = Field(
+        default=160,
+        description="Maximum completion tokens per benchmark run",
+        ge=1,
+        le=512,
+    )
+    temperature: float = Field(
+        default=0.2,
+        description="Sampling temperature for benchmark stability",
+        ge=0.0,
+        le=2.0,
+    )
+    top_p: float = Field(
+        default=0.9,
+        description="Top-p sampling parameter",
+        ge=0.0,
+        le=1.0,
+    )
+    top_k: int = Field(
+        default=40,
+        description="Top-k sampling parameter",
+        ge=1,
+        le=100,
+    )
+    runs: int = Field(
+        default=2,
+        description="How many runs to execute per context size",
+        ge=1,
+        le=5,
+    )
+    context_sizes: list[int] | None = Field(
+        default=None,
+        description="Optional list of context sizes to test (e.g. [512, 1024])",
+        max_length=4,
+    )
+
+
+class BenchmarkProfile(BaseModel):
+    """Average benchmark metrics for a context size."""
+
+    context_size: int = Field(..., description="Context size used for this profile")
+    runs: int = Field(..., description="Number of runs in this profile")
+    avg_latency_ms: float = Field(..., description="Average wall clock latency in ms")
+    avg_ttft_ms: float | None = Field(
+        default=None,
+        description="Average approximate time-to-first-token in ms",
+    )
+    avg_completion_tokens: float = Field(
+        ..., description="Average generated completion tokens"
+    )
+    avg_completion_tokens_per_second: float = Field(
+        ..., description="Average completion throughput (tokens/s)"
+    )
+
+
+class BenchmarkEnvRecommendation(BaseModel):
+    """Recommended environment variables based on benchmark results."""
+
+    N_CTX: int = Field(..., description="Recommended context size")
+    MAX_TOKENS: int = Field(..., description="Recommended default max tokens")
+    N_THREADS: int = Field(..., description="Recommended thread count")
+    OLLAMA_KEEP_ALIVE: str = Field(..., description="Recommended Ollama keep-alive")
+
+
+class BenchmarkRequestDefaultsRecommendation(BaseModel):
+    """Recommended per-request defaults."""
+
+    max_tokens: int = Field(..., description="Recommended request max_tokens")
+    stream: bool = Field(..., description="Whether streaming is recommended")
+
+
+class BenchmarkRecommendation(BaseModel):
+    """Benchmark recommendation payload."""
+
+    env: BenchmarkEnvRecommendation
+    request_defaults: BenchmarkRequestDefaultsRecommendation
+    reason: str = Field(..., description="Explanation for this recommendation")
+
+
+class BenchmarkResponse(BaseModel):
+    """Response model for benchmark endpoint."""
+
+    model: str = Field(..., description="Model used for benchmarking")
+    runs: int = Field(..., description="Number of runs performed per profile")
+    prompt_chars: int = Field(..., description="Prompt size in characters")
+    profiles: list[BenchmarkProfile] = Field(
+        ..., description="Measured profiles for each tested context size"
+    )
+    recommended: BenchmarkRecommendation
+
+
 class StreamChunk(BaseModel):
     """Model for streaming response chunks."""
 

@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from concurrent.futures import ThreadPoolExecutor
+from statistics import mean
 
 from app.core.llm import LLMManager
 from app.core.queue import InferenceRequest, RequestQueue
@@ -238,6 +239,131 @@ class InferenceService:
         """Stop the service."""
         self._running = False
         self._executor.shutdown(wait=False)
+
+    async def benchmark(
+        self,
+        prompt: str,
+        system: str | None = None,
+        max_tokens: int = 160,
+        temperature: float = 0.2,
+        top_p: float = 0.9,
+        top_k: int = 40,
+        runs: int = 2,
+        context_sizes: list[int] | None = None,
+    ) -> dict:
+        """Benchmark inference speed and return tuning recommendations."""
+        if not self.llm_manager or not self.llm_manager.is_loaded:
+            raise RuntimeError("Model not loaded")
+
+        loop = asyncio.get_event_loop()
+        base_ctx = self.llm_manager.settings.n_ctx
+        candidates = context_sizes or [max(512, min(base_ctx, 1024)), base_ctx]
+
+        # Keep valid, unique context sizes while preserving order.
+        seen = set()
+        valid_contexts = []
+        for ctx in candidates:
+            if ctx < 256 or ctx > 8192 or ctx in seen:
+                continue
+            seen.add(ctx)
+            valid_contexts.append(ctx)
+
+        if not valid_contexts:
+            valid_contexts = [base_ctx]
+
+        profiles = []
+        async with self._llm_lock:
+            for ctx in valid_contexts:
+                run_results = []
+                for _ in range(runs):
+                    result = await loop.run_in_executor(
+                        self._executor,
+                        lambda target_ctx=ctx: self.llm_manager.generate_with_metrics(
+                            prompt=prompt,
+                            system=system,
+                            max_tokens=max_tokens,
+                            temperature=temperature,
+                            top_p=top_p,
+                            top_k=top_k,
+                            stop=[],
+                            n_ctx=target_ctx,
+                        ),
+                    )
+                    run_results.append(result)
+
+                profile = {
+                    "context_size": ctx,
+                    "runs": runs,
+                    "avg_latency_ms": round(mean(r["latency_ms"] for r in run_results), 2),
+                    "avg_ttft_ms": round(
+                        mean(
+                            r["time_to_first_token_ms"]
+                            for r in run_results
+                            if r["time_to_first_token_ms"] is not None
+                        ),
+                        2,
+                    )
+                    if any(r["time_to_first_token_ms"] is not None for r in run_results)
+                    else None,
+                    "avg_completion_tokens": round(
+                        mean(r["completion_tokens"] for r in run_results),
+                        2,
+                    ),
+                    "avg_completion_tokens_per_second": round(
+                        mean(r["completion_tokens_per_second"] for r in run_results),
+                        2,
+                    ),
+                }
+                profiles.append(profile)
+
+        best_profile = max(
+            profiles,
+            key=lambda p: (
+                p["avg_completion_tokens_per_second"],
+                -p["avg_latency_ms"],
+            ),
+        )
+        recommended_max_tokens = self._recommend_max_tokens(
+            requested_max_tokens=max_tokens,
+            completion_tokens_per_second=best_profile["avg_completion_tokens_per_second"],
+        )
+
+        return {
+            "model": self.llm_manager.model_name,
+            "runs": runs,
+            "prompt_chars": len(prompt),
+            "profiles": profiles,
+            "recommended": {
+                "env": {
+                    "N_CTX": best_profile["context_size"],
+                    "MAX_TOKENS": recommended_max_tokens,
+                    "N_THREADS": self.llm_manager.settings.n_threads,
+                    "OLLAMA_KEEP_ALIVE": self.llm_manager.settings.ollama_keep_alive,
+                },
+                "request_defaults": {
+                    "max_tokens": recommended_max_tokens,
+                    "stream": True,
+                },
+                "reason": (
+                    "Recommendation favors the profile with the highest measured completion token throughput."
+                ),
+            },
+        }
+
+    @staticmethod
+    def _recommend_max_tokens(
+        requested_max_tokens: int,
+        completion_tokens_per_second: float,
+    ) -> int:
+        """Pick a practical default max_tokens based on measured throughput."""
+        cap = max(32, requested_max_tokens)
+        if completion_tokens_per_second < 4:
+            return min(cap, 64)
+        if completion_tokens_per_second < 8:
+            return min(cap, 96)
+        if completion_tokens_per_second < 12:
+            return min(cap, 128)
+        return min(cap, 160)
 
 
 # Keep backward compatibility alias

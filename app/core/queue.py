@@ -15,7 +15,7 @@ class InferenceRequest:
 
     prompt: str
     system: str | None = None
-    max_tokens: int = 512
+    max_tokens: int = 160
     temperature: float = 0.7
     top_p: float = 0.9
     top_k: int = 40

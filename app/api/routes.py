@@ -12,6 +12,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sse_starlette.sse import EventSourceResponse
 
 from app.api.schemas import (
+    BenchmarkRequest,
+    BenchmarkResponse,
     ErrorResponse,
     GenerateRequest,
     GenerateResponse,
@@ -45,7 +47,7 @@ async def health_check(request: Request) -> HealthResponse:
     return HealthResponse(
         status="healthy" if llm_manager and llm_manager.is_loaded else "degraded",
         model_loaded=llm_manager.is_loaded if llm_manager else False,
-        model_path=settings.model_path,
+        model_path=settings.ollama_model,
         queue_size=request_queue.size if request_queue else 0,
         active_requests=inference_service.active_count if inference_service else 0,
         max_concurrent=inference_service.max_concurrent if inference_service else 0,
@@ -110,6 +112,63 @@ async def generate(
     else:
         # Synchronous response
         return await wait_for_completion(inference_request)
+
+
+@router.post(
+    "/benchmark",
+    response_model=BenchmarkResponse,
+    responses={
+        200: {"description": "Benchmark completed"},
+        401: {"model": ErrorResponse, "description": "Invalid API key"},
+        503: {"model": ErrorResponse, "description": "Model not loaded"},
+    },
+    tags=["Generation"],
+    summary="Benchmark model performance",
+    description=(
+        "Run a small benchmark against the current model and return throughput "
+        "metrics with Pi-oriented tuning recommendations."
+    ),
+)
+async def benchmark(
+    request: Request,
+    body: BenchmarkRequest,
+    _: Annotated[str, Depends(verify_api_key)],
+) -> BenchmarkResponse:
+    """Benchmark model speed and return recommended settings."""
+    llm_manager = request.app.state.llm_manager
+    inference_service = request.app.state.inference_service
+
+    if not llm_manager or not llm_manager.is_loaded:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Model not loaded. Please download the model first.",
+        )
+
+    if not inference_service:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Inference service not available.",
+        )
+
+    try:
+        result = await inference_service.benchmark(
+            prompt=body.prompt,
+            system=body.system,
+            max_tokens=body.max_tokens,
+            temperature=body.temperature,
+            top_p=body.top_p,
+            top_k=body.top_k,
+            runs=body.runs,
+            context_sizes=body.context_sizes,
+        )
+    except Exception as e:
+        logger.error(f"Benchmark error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Benchmark failed. Check server logs for details.",
+        ) from e
+
+    return BenchmarkResponse(**result)
 
 
 async def stream_generator(inference_request: InferenceRequest):

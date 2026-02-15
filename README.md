@@ -11,6 +11,7 @@ This project provides a lightweight FastAPI server that allows you to run a loca
 - **FastAPI Interface**: Clean RESTful API for text generation and system health monitoring.
 - **System Prompts**: Guide model behavior with dedicated system prompts.
 - **SSE Streaming**: Real-time token streaming using Server-Sent Events (SSE).
+- **Benchmark & Auto-Tuning**: Measure token throughput and get recommended Pi settings.
 - **SQLite Authentication**: Robust API key management with SQLite storage and HMAC-SHA256 hashing.
 - **Request Queuing**: Built-in concurrency management to handle multiple requests without crashing the Pi.
 - **Tailscale Friendly**: Defaults to `0.0.0.0` for easy access over Tailscale or local networks.
@@ -137,6 +138,7 @@ curl -N -X POST http://localhost:8000/generate \
   -H "X-API-Key: YOUR_API_KEY" \
   -d '{
     "prompt": "Explain gravity in one sentence.",
+    "max_tokens": 96,
     "stream": true
   }'
 ```
@@ -149,6 +151,7 @@ curl -X POST http://localhost:8000/generate \
   -H "X-API-Key: YOUR_API_KEY" \
   -d '{
     "prompt": "What is 2+2?",
+    "max_tokens": 32,
     "stream": false
   }'
 ```
@@ -164,7 +167,24 @@ curl -X POST http://localhost:8000/generate \
   -d '{
     "prompt": "What is photosynthesis?",
     "system": "You are a science teacher explaining to a 5-year-old. Use simple words and be enthusiastic.",
+    "max_tokens": 96,
     "stream": false
+  }'
+```
+
+### 6. Benchmark and Auto-Tune (Pi 5)
+
+Run a quick benchmark and get recommended `.env` + request defaults:
+
+```bash
+curl -X POST http://localhost:8000/benchmark \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -d '{
+    "prompt": "Explain photosynthesis in two short sentences.",
+    "max_tokens": 160,
+    "runs": 2,
+    "context_sizes": [512, 1024]
   }'
 ```
 
@@ -225,7 +245,7 @@ Generate text from a prompt. Supports both streaming (default) and non-streaming
 {
   "prompt": "Explain gravity in one sentence.",
   "system": "You are a helpful assistant",
-  "max_tokens": 512,
+  "max_tokens": 160,
   "temperature": 0.7,
   "top_p": 0.9,
   "top_k": 40,
@@ -237,7 +257,7 @@ Generate text from a prompt. Supports both streaming (default) and non-streaming
 **Parameters:**
 - `prompt` (string, required): The input prompt (1-8192 characters)
 - `system` (string, optional): System prompt to guide model behavior (max 4096 characters)
-- `max_tokens` (integer, optional): Maximum tokens to generate (1-2048, default: 512)
+- `max_tokens` (integer, optional): Maximum tokens to generate (1-2048, default: 160)
 - `temperature` (float, optional): Sampling temperature 0.0-2.0 (default: 0.7)
 - `top_p` (float, optional): Top-p sampling 0.0-1.0 (default: 0.9)
 - `top_k` (integer, optional): Top-k sampling 1-100 (default: 40)
@@ -292,6 +312,69 @@ curl -X POST http://localhost:8000/generate \
   }'
 ```
 
+### Benchmark Model Performance
+
+**Endpoint:** `POST /benchmark`
+
+Run controlled benchmark requests and get measured throughput with recommended Pi settings.
+
+**Headers:**
+- `Content-Type: application/json`
+- `X-API-Key: YOUR_API_KEY`
+
+**Request Body:**
+```json
+{
+  "prompt": "Explain photosynthesis in two short sentences.",
+  "max_tokens": 160,
+  "temperature": 0.2,
+  "top_p": 0.9,
+  "top_k": 40,
+  "runs": 2,
+  "context_sizes": [512, 1024]
+}
+```
+
+**Response:**
+```json
+{
+  "model": "gemma:2b",
+  "runs": 2,
+  "prompt_chars": 47,
+  "profiles": [
+    {
+      "context_size": 512,
+      "runs": 2,
+      "avg_latency_ms": 1840.17,
+      "avg_ttft_ms": 311.89,
+      "avg_completion_tokens": 78.0,
+      "avg_completion_tokens_per_second": 9.42
+    },
+    {
+      "context_size": 1024,
+      "runs": 2,
+      "avg_latency_ms": 2124.63,
+      "avg_ttft_ms": 356.21,
+      "avg_completion_tokens": 78.5,
+      "avg_completion_tokens_per_second": 8.11
+    }
+  ],
+  "recommended": {
+    "env": {
+      "N_CTX": 512,
+      "MAX_TOKENS": 128,
+      "N_THREADS": 4,
+      "OLLAMA_KEEP_ALIVE": "30m"
+    },
+    "request_defaults": {
+      "max_tokens": 128,
+      "stream": true
+    },
+    "reason": "Recommendation favors the profile with the highest measured completion token throughput."
+  }
+}
+```
+
 ### Generate API Key
 
 **Endpoint:** `POST /keys/generate`
@@ -328,9 +411,12 @@ You can customize the server by creating a `.env` file in the root directory:
 HOST=0.0.0.0
 PORT=8000
 OLLAMA_PORT=11434
-MODEL_NAME=gemma:2b
-MAX_TOKENS=512
-TEMPERATURE=0.7
+OLLAMA_MODEL=gemma:2b
+OLLAMA_KEEP_ALIVE=30m
+OLLAMA_WARMUP=true
+N_CTX=1024
+N_THREADS=4
+MAX_TOKENS=160
 API_KEYS_DB=api_keys.db
 ```
 
@@ -354,5 +440,6 @@ Source code and git repository are preserved.
 
 - **Thermal Throttling**: Running LLMs is CPU intensive. Ensure your Pi 5 has adequate cooling (Active Cooler).
 - **Memory**: The Gemma 2B model fits comfortably within 2GB of RAM.
-- **Inference Speed**: You can expect ~5-10 tokens per second on a Pi 5.
-- **Ollama**: Automatically handles ARM optimizations and model caching.
+- **Inference Speed**: Long answers are expensive on Pi. Keep `max_tokens` low (for example `64-160`) for much faster responses.
+- **Streaming**: Use `"stream": true` to start receiving output immediately instead of waiting for the full completion.
+- **Model Residency**: `OLLAMA_KEEP_ALIVE=30m` keeps the model in memory and avoids repeated cold-start delays.

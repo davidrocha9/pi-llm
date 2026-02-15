@@ -28,15 +28,20 @@ class Settings(BaseSettings):
     # If a relative path is provided it will be resolved against the repo root.
     api_keys_db: str | None = "api_keys.db"
 
-    # Model Configuration
+    # Ollama Model Configuration
+    ollama_model: str = "gemma:2b"
+    ollama_keep_alive: str = "30m"
+    ollama_warmup: bool = True
+
+    # Legacy GGUF fields (kept for backward compatibility)
     model_path: str = "models/gemma-3-1b-it-Q4_K_M.gguf"
     model_repo: str = "unsloth/gemma-3-1b-it-GGUF"
     model_filename: str = "gemma-3-1b-it-Q4_K_M.gguf"
 
     # LLM Settings (optimized for Raspberry Pi 5)
-    n_ctx: int = 2048  # Context window size
+    n_ctx: int = 1024  # Smaller context is faster on Pi-class CPUs
     n_threads: int = 4  # CPU threads for inference
-    max_tokens: int = 512  # Default max tokens per response
+    max_tokens: int = 160  # Lower default reduces latency significantly
 
     # Concurrency Settings
     # Note: LLM inference is serialized (llama-cpp not thread-safe), but multiple

@@ -36,8 +36,8 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Pi LLM service...")
 
     # Initialize LLM
-    logger.info(f"Loading model from {settings.model_path}...")
     llm_manager = LLMManager(settings)
+    logger.info(f"Loading model from {llm_manager.model_name} via Ollama...")
 
     try:
         llm_manager.load_model()
